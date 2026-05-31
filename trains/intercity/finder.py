@@ -1,3 +1,5 @@
+from concurrent.futures import ThreadPoolExecutor
+
 from . import client, parser, stations, hopping
 
 def wagon_legs_free(category, number, wagon, schema, stop_e, date):
@@ -15,14 +17,17 @@ def train_legs_free(category, number, stops, date, wagons, schemas):
     # kody e każdego przystanku liczymy RAZ (zamiast w każdym wagonie z osobna)
     stop_e = [stations.h_to_e(s["nazwaStacji"], s["kodStacji"]) for s in stops]
     n = len(stops) - 1
-    legs_free = [set() for _ in range(n)]          # pusta lista n zbiorów (po jednym na nogę)
-    for wagon in wagons:
-        schema = schemas.get(str(wagon))
-        if not schema:
-            continue
-        wlegs = wagon_legs_free(category, number, str(wagon), schema, stop_e, date)
-        for i in range(n):
-            legs_free[i] |= wlegs[i]               # |= to UNIA zbiorów: dorzuć wolne tego wagonu
+    valid = [str(w) for w in wagons if schemas.get(str(w))]   # tylko wagony ze schematem
+
+    def fetch_wagon(wagon):                                   # praca dla jednego wagonu
+        return wagon_legs_free(category, number, wagon, schemas[wagon], stop_e, date)
+
+    legs_free = [set() for _ in range(n)]                     # po jednym zbiorze na nogę
+    # ThreadPoolExecutor pobiera wszystkie wagony RÓWNOLEGLE (czekanie na sieć się nakłada)
+    with ThreadPoolExecutor(max_workers=4) as pool:         # delikatnie, żeby nie zalać API
+        for wlegs in pool.map(fetch_wagon, valid):
+            for i in range(n):
+                legs_free[i] |= wlegs[i]                      # unia: dorzuć wolne tego wagonu
     return legs_free
 
 
