@@ -1,4 +1,4 @@
-from . import client, parser, stations
+from . import client, parser, stations, hopping
 
 def wagon_legs_free(category, number, wagon, schema, stops, date):
     ts = date + "0000"
@@ -25,3 +25,30 @@ def train_legs_free(category, number, stops, date, wagons, schemas):
         for i in range(n):
             legs_free[i] |= wlegs[i]               # |= to UNIA zbiorów: dorzuć wolne tego wagonu
     return legs_free
+
+
+def plan_journey(category, number, departure, from_h, to_h, date):
+    # 1. trasa pociągu (przystanki z kodami h + nazwami)
+    stops = client.get_route(number, departure, from_h, to_h)
+    # 2. kody e początku i końca trasy (potrzebne do składu)
+    dep_e = stations.h_to_e(stops[0]["nazwaStacji"], stops[0]["kodStacji"])
+    arr_e = stations.h_to_e(stops[-1]["nazwaStacji"], stops[-1]["kodStacji"])
+    # 3. skład pociągu (wagony + schematy)
+    sk = client.get_composition(category, number, dep_e, arr_e, date + "0000", date + "0000")
+    # 4. wolne miejsca per noga, w całym pociągu (pary (wagon, miejsce))
+    legs = train_legs_free(category, number, stops, date, sk["wagony"], sk["wagonySchemat"])
+    # 5. najlepszy plan (0 przesiadek jeśli się da, inaczej najmniej przesiadek)
+    plan = hopping.find_plan(legs)
+
+    names = [s["nazwaStacji"] for s in stops]
+    segments = []
+    if plan:
+        for (wagon, seat), a, b in plan:               # ((wagon, miejsce), od_przystanku, do_przystanku)
+            segments.append({
+                "wagon": wagon, "seat": seat,
+                "from": names[a], "to": names[b],
+            })
+    return {
+        "transfers": (len(plan) - 1) if plan else None,
+        "segments": segments,
+    }
