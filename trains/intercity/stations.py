@@ -10,3 +10,8 @@ def search(q):
     })
     return response.json()
 
+def h_to_e(name, h):
+    for station in search(name):
+        if station["h"] == h:
+            return station["e"]
+    return None
