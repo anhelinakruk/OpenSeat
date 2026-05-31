@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="pl">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -18,16 +18,16 @@
 </style>
 </head>
 <body>
-<h1>🚂 OpenSeat — miejsca z przesiadkami</h1>
-<p class="muted">Znajdź wolne miejsce nawet w „wyprzedanym” pociągu — przesiadając się między miejscami.</p>
+<h1>🚂 OpenSeat — seats with mid-trip changes</h1>
+<p class="muted">Find a seat even on a "sold out" train by changing seats along the way.</p>
 
 <div>
-  <input id="from" list="fromList" placeholder="Skąd (np. Wrocław)" autocomplete="off">
+  <input id="from" list="fromList" placeholder="From (e.g. Wrocław)" autocomplete="off">
   <datalist id="fromList"></datalist>
-  <input id="to" list="toList" placeholder="Dokąd (np. Przemyśl)" autocomplete="off">
+  <input id="to" list="toList" placeholder="To (e.g. Przemyśl)" autocomplete="off">
   <datalist id="toList"></datalist>
   <input id="date" type="date">
-  <button onclick="searchTrains()">Szukaj</button>
+  <button onclick="searchTrains()">Search</button>
 </div>
 
 <div id="trains"></div>
@@ -46,7 +46,7 @@ function setupAutocomplete(which) {
     list.innerHTML = "";
     maps[which] = {};
     for (const s of data) {
-      maps[which][s.n] = s;                       // zapamiętaj kody h/e pod nazwą stacji
+      maps[which][s.n] = s;                       // remember h/e codes under the station name
       const opt = document.createElement("option");
       opt.value = s.n;
       list.appendChild(opt);
@@ -63,17 +63,17 @@ async function searchTrains() {
   const trainsDiv = document.getElementById("trains");
   document.getElementById("plan").innerHTML = "";
   if (!fromS || !toS || !date) {
-    trainsDiv.innerHTML = "<p class='muted'>Wybierz stacje z podpowiedzi i datę.</p>";
+    trainsDiv.innerHTML = "<p class='muted'>Pick stations from the suggestions and a date.</p>";
     return;
   }
-  trainsDiv.innerHTML = "<p class='muted'>Szukam pociągów…</p>";
+  trainsDiv.innerHTML = "<p class='muted'>Searching for trains…</p>";
   const trains = await (await fetch(`/api/connections/?from=${fromS.h}&to=${toS.h}&date=${date}`)).json();
-  if (!trains.length) { trainsDiv.innerHTML = "<p class='muted'>Brak bezpośrednich pociągów.</p>"; return; }
+  if (!trains.length) { trainsDiv.innerHTML = "<p class='muted'>No direct trains.</p>"; return; }
   trainsDiv.innerHTML = "";
   for (const t of trains) {
     const div = document.createElement("div");
     div.className = "train";
-    div.textContent = `${t.category} ${t.number} ${t.name} — odj. ${t.departure.slice(11,16)}`;
+    div.textContent = `${t.category} ${t.number} ${t.name} — dep. ${t.departure.slice(11,16)}`;
     div.onclick = () => showPlan(t, fromS, toS, date);
     trainsDiv.appendChild(div);
   }
@@ -81,7 +81,7 @@ async function searchTrains() {
 
 async function showPlan(train, fromS, toS, date) {
   const planDiv = document.getElementById("plan");
-  planDiv.innerHTML = "<p class='muted'>Sprawdzam miejsca i przesiadki (kilkanaście sekund)…</p>";
+  planDiv.innerHTML = "<p class='muted'>Checking seats and transfers (may take a few seconds)…</p>";
   const dateCode = date.replaceAll("-", "");                 // 20260615
   const departure = train.departure.replace(" ", "T");       // 2026-06-15T05:10:00
   const url = `/api/journey/?category=${train.category}&number=${train.number}` +
@@ -89,20 +89,20 @@ async function showPlan(train, fromS, toS, date) {
   const data = await (await fetch(url)).json();
 
   if (data.transfers === null || !data.segments.length) {
-    planDiv.innerHTML = `<h3>${train.category} ${train.number}</h3><p>😞 Brak miejsc, nawet z przesiadkami.</p>`;
+    planDiv.innerHTML = `<h3>${train.category} ${train.number}</h3><p>😞 No seats available, even with transfers.</p>`;
     return;
   }
   let html = `<h3>${train.category} ${train.number} ${train.name}</h3>`;
   html += data.transfers === 0
-    ? `<p>✅ Jest miejsce na całą trasę (0 przesiadek):</p>`
-    : `<p>🔁 Trzeba się przesiąść ${data.transfers}× między miejscami:</p>`;
+    ? `<p>✅ A seat is available for the whole trip (0 transfers):</p>`
+    : `<p>🔁 You need to change seats ${data.transfers}× along the way:</p>`;
   for (const seg of data.segments) {
-    html += `<div class="seg">🚆 wagon <b>${seg.wagon}</b>, miejsce <b>${seg.seat}</b>: ${seg.from} → ${seg.to}</div>`;
+    html += `<div class="seg">🚆 wagon <b>${seg.wagon}</b>, seat <b>${seg.seat}</b>: ${seg.from} → ${seg.to}</div>`;
   }
   planDiv.innerHTML = html;
 }
 
-// domyślna data: jutro
+// default date: tomorrow
 document.getElementById("date").value = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
 </script>
 </body>
