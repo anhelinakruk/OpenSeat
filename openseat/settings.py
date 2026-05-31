@@ -82,6 +82,18 @@ DATABASES = {
 }
 
 
+# Cache
+# Used by the InterCity service layer (trains/intercity/finder.py) to avoid hammering the
+# upstream API. LocMemCache is per-process and fine for development; for multi-process
+# production (e.g. gunicorn) use a shared backend such as Redis.
+
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+    }
+}
+
+
 # Password validation
 # https://docs.djangoproject.com/en/6.0/ref/settings/#auth-password-validators
 
