@@ -1,7 +1,7 @@
 """Tests for the seat-hopping algorithm (pure logic - no network, no database)."""
 from django.test import SimpleTestCase
 
-from trains.intercity.hopping import find_plan, fully_free_seats, seat_reach
+from trains.intercity.hopping import find_plan, find_plans, fully_free_seats, seat_reach
 
 
 class FullyFreeSeatsTests(SimpleTestCase):
@@ -54,3 +54,25 @@ class FindPlanTests(SimpleTestCase):
         legs = [{"A", "B"}, {"A", "C"}, {"A"}]
         plan = find_plan(legs)
         self.assertEqual(plan, [("A", 0, 3)])
+
+
+class FindPlansTests(SimpleTestCase):
+    def test_multiple_full_trip_seats(self):
+        # three seats free the whole way -> three zero-transfer options
+        legs = [{"1", "2", "3"}, {"1", "2", "3"}]
+        plans = find_plans(legs)
+        self.assertEqual(len(plans), 3)
+        self.assertTrue(all(len(p) == 1 for p in plans))   # each a single segment (0 transfers)
+
+    def test_orders_by_fewest_transfers(self):
+        # "A" covers everything (0 transfers); "B" needs a change -> "A" option comes first
+        legs = [{"A", "B"}, {"A"}]
+        plans = find_plans(legs)
+        self.assertEqual(plans[0], [("A", 0, 2)])
+
+    def test_respects_limit(self):
+        legs = [{"1", "2", "3", "4", "5"}]
+        self.assertEqual(len(find_plans(legs, limit=2)), 2)
+
+    def test_empty(self):
+        self.assertEqual(find_plans([]), [])
