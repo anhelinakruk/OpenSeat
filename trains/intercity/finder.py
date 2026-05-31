@@ -1,27 +1,26 @@
 from . import client, parser, stations, hopping
 
-def wagon_legs_free(category, number, wagon, schema, stops, date):
+def wagon_legs_free(category, number, wagon, schema, stop_e, date):
+    # stop_e: gotowa lista kodów e przystanków (policzona raz w train_legs_free)
     ts = date + "0000"
     legs_free = []
-    for i in range(len(stops) - 1):
-        a = stops[i]
-        b = stops[i + 1]
-        dep_e = stations.h_to_e(a["nazwaStacji"], a["kodStacji"])
-        arr_e = stations.h_to_e(b["nazwaStacji"], b["kodStacji"])
-        svg = client.get_seats(category, number, wagon, schema, dep_e, arr_e, ts, ts)
+    for i in range(len(stop_e) - 1):
+        svg = client.get_seats(category, number, wagon, schema, stop_e[i], stop_e[i + 1], ts, ts)
         seats = parser.parse_seats(svg)
         free_seats = set((wagon, s["number"]) for s in seats if s["free"])
         legs_free.append(free_seats)
     return legs_free
 
 def train_legs_free(category, number, stops, date, wagons, schemas):
+    # kody e każdego przystanku liczymy RAZ (zamiast w każdym wagonie z osobna)
+    stop_e = [stations.h_to_e(s["nazwaStacji"], s["kodStacji"]) for s in stops]
     n = len(stops) - 1
     legs_free = [set() for _ in range(n)]          # pusta lista n zbiorów (po jednym na nogę)
     for wagon in wagons:
         schema = schemas.get(str(wagon))
         if not schema:
             continue
-        wlegs = wagon_legs_free(category, number, str(wagon), schema, stops, date)
+        wlegs = wagon_legs_free(category, number, str(wagon), schema, stop_e, date)
         for i in range(n):
             legs_free[i] |= wlegs[i]               # |= to UNIA zbiorów: dorzuć wolne tego wagonu
     return legs_free
