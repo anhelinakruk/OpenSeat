@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OpenSeat</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 680px; margin: 2rem auto; padding: 0 1rem; color: #222; }
+  h1 { font-size: 1.4rem; }
+  input, button { font-size: 1rem; padding: .45rem .5rem; margin: .2rem .2rem .2rem 0; }
+  button { cursor: pointer; background: #1a5; color: #fff; border: 0; border-radius: 6px; }
+  .train { border: 1px solid #ccc; border-radius: 8px; padding: .5rem .7rem; margin: .35rem 0; cursor: pointer; }
+  .train:hover { background: #eef6ff; border-color: #6af; }
+  .seg { padding: .25rem 0; }
+  .muted { color: #888; }
+  #plan { margin-top: 1.2rem; padding-top: .8rem; border-top: 1px solid #eee; }
+  h3 { margin-bottom: .3rem; }
+</style>
+</head>
+<body>
+<h1>🚂 OpenSeat — miejsca z przesiadkami</h1>
+<p class="muted">Znajdź wolne miejsce nawet w „wyprzedanym” pociągu — przesiadając się między miejscami.</p>
+
+<div>
+  <input id="from" list="fromList" placeholder="Skąd (np. Wrocław)" autocomplete="off">
+  <datalist id="fromList"></datalist>
+  <input id="to" list="toList" placeholder="Dokąd (np. Przemyśl)" autocomplete="off">
+  <datalist id="toList"></datalist>
+  <input id="date" type="date">
+  <button onclick="searchTrains()">Szukaj</button>
+</div>
+
+<div id="trains"></div>
+<div id="plan"></div>
+
+<script>
+const maps = { from: {}, to: {} };
+
+function setupAutocomplete(which) {
+  const input = document.getElementById(which);
+  const list = document.getElementById(which + "List");
+  input.addEventListener("input", async () => {
+    const q = input.value.trim();
+    if (q.length < 2) return;
+    const data = await (await fetch("/api/stations/?q=" + encodeURIComponent(q))).json();
+    list.innerHTML = "";
+    maps[which] = {};
+    for (const s of data) {
+      maps[which][s.n] = s;                       // zapamiętaj kody h/e pod nazwą stacji
+      const opt = document.createElement("option");
+      opt.value = s.n;
+      list.appendChild(opt);
+    }
+  });
+}
+setupAutocomplete("from");
+setupAutocomplete("to");
+
+async function searchTrains() {
+  const fromS = maps.from[document.getElementById("from").value];
+  const toS = maps.to[document.getElementById("to").value];
+  const date = document.getElementById("date").value;        // 2026-06-15
+  const trainsDiv = document.getElementById("trains");
+  document.getElementById("plan").innerHTML = "";
+  if (!fromS || !toS || !date) {
+    trainsDiv.innerHTML = "<p class='muted'>Wybierz stacje z podpowiedzi i datę.</p>";
+    return;
+  }
+  trainsDiv.innerHTML = "<p class='muted'>Szukam pociągów…</p>";
+  const trains = await (await fetch(`/api/connections/?from=${fromS.h}&to=${toS.h}&date=${date}`)).json();
+  if (!trains.length) { trainsDiv.innerHTML = "<p class='muted'>Brak bezpośrednich pociągów.</p>"; return; }
+  trainsDiv.innerHTML = "";
+  for (const t of trains) {
+    const div = document.createElement("div");
+    div.className = "train";
+    div.textContent = `${t.category} ${t.number} ${t.name} — odj. ${t.departure.slice(11,16)}`;
+    div.onclick = () => showPlan(t, fromS, toS, date);
+    trainsDiv.appendChild(div);
+  }
+}
+
+async function showPlan(train, fromS, toS, date) {
+  const planDiv = document.getElementById("plan");
+  planDiv.innerHTML = "<p class='muted'>Sprawdzam miejsca i przesiadki (kilkanaście sekund)…</p>";
+  const dateCode = date.replaceAll("-", "");                 // 20260615
+  const departure = train.departure.replace(" ", "T");       // 2026-06-15T05:10:00
+  const url = `/api/journey/?category=${train.category}&number=${train.number}` +
+              `&departure=${departure}&from=${fromS.h}&to=${toS.h}&date=${dateCode}`;
+  const data = await (await fetch(url)).json();
+
+  if (data.transfers === null || !data.segments.length) {
+    planDiv.innerHTML = `<h3>${train.category} ${train.number}</h3><p>😞 Brak miejsc, nawet z przesiadkami.</p>`;
+    return;
+  }
+  let html = `<h3>${train.category} ${train.number} ${train.name}</h3>`;
+  html += data.transfers === 0
+    ? `<p>✅ Jest miejsce na całą trasę (0 przesiadek):</p>`
+    : `<p>🔁 Trzeba się przesiąść ${data.transfers}× między miejscami:</p>`;
+  for (const seg of data.segments) {
+    html += `<div class="seg">🚆 wagon <b>${seg.wagon}</b>, miejsce <b>${seg.seat}</b>: ${seg.from} → ${seg.to}</div>`;
+  }
+  planDiv.innerHTML = html;
+}
+
+// domyślna data: jutro
+document.getElementById("date").value = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+</script>
+</body>
+</html>
