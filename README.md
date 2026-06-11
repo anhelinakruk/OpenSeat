@@ -17,6 +17,8 @@ Browser (HTML + JS)  →  Django REST API  →  InterCity client + hopping algor
 - `trains/intercity/` — framework-agnostic InterCity client (HTTP, station codes, SVG parser),
   the seat-hopping algorithm (`hopping.py`) and the service layer (`finder.py`).
 - `trains/models.py` — `SeatMapCache`, a database-backed cache of volatile seat maps.
+- `trains/middleware.py` — per-IP rate limiting for `/api/`, to keep upstream traffic down.
+- `trains/signals.py` — prunes stale `SeatMapCache` rows on save.
 - `trains/api.py`, `trains/urls.py` — REST API endpoints.
 - `trains/templates/index.html` — single-page frontend.
 

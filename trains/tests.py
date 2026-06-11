@@ -2,12 +2,15 @@
 from datetime import timedelta
 from unittest import mock
 
-from django.test import SimpleTestCase, TestCase
+from django.core.cache import cache
+from django.http import HttpResponse
+from django.test import RequestFactory, SimpleTestCase, TestCase
 from django.utils import timezone
 
 from trains.intercity import client, parser
 from trains.intercity.errors import InterCityError
 from trains.intercity.hopping import find_plan, find_plans, fully_free_seats, seat_reach
+from trains.middleware import LIMIT, RateLimitMiddleware
 from trains.models import SeatMapCache
 
 
@@ -164,3 +167,19 @@ class PruneSignalTests(TestCase):
 
         remaining = list(SeatMapCache.objects.values_list("wagon", flat=True))
         self.assertEqual(remaining, ["15"])                      # only the fresh row survives
+
+
+class RateLimitMiddlewareTests(SimpleTestCase):
+    def setUp(self):
+        cache.clear()                                            # start each test with a clean counter
+        self.mw = RateLimitMiddleware(lambda req: HttpResponse("ok"))
+        self.factory = RequestFactory()
+
+    def test_blocks_api_requests_over_the_limit(self):
+        for _ in range(LIMIT):
+            self.assertEqual(self.mw(self.factory.get("/api/stations/")).status_code, 200)
+        self.assertEqual(self.mw(self.factory.get("/api/stations/")).status_code, 429)
+
+    def test_non_api_paths_are_not_limited(self):
+        for _ in range(LIMIT + 5):
+            self.assertEqual(self.mw(self.factory.get("/")).status_code, 200)
