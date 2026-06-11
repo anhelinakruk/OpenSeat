@@ -39,7 +39,10 @@ def get_route(number: str, departure: str, from_h, to_h) -> list[dict]:
         "url": "https://ebilet.intercity.pl/wybormiejsc", "urzadzenieNr": config.DEVICE_NR,
     }
     data = _call_pociagi(body)
-    return data["trasePrzejezdu"]["trasaPrzejazdu"]
+    try:
+        return data["trasePrzejezdu"]["trasaPrzejazdu"]
+    except (KeyError, TypeError) as exc:
+        raise InterCityError("Unexpected route response shape from InterCity.") from exc
 
 
 def search_connections(from_h, to_h, date: str) -> list[dict]:
@@ -54,14 +57,17 @@ def search_connections(from_h, to_h, date: str) -> list[dict]:
         "atrybutyHandlowe": [], "braille": 0, "urzadzenieNr": config.DEVICE_NR,
     }
     data = _call_pociagi(body)
-    trains = []
-    for connection in data["polaczenia"]:
-        if len(connection["pociagi"]) == 1:               # direct connections only (a single train)
-            t = connection["pociagi"][0]
-            trains.append({
-                "category": t["kategoriaPociagu"],
-                "number": str(t["nrPociagu"]),
-                "name": t["nazwaPociagu"],
-                "departure": t["dataWyjazdu"],
-            })
-    return trains
+    try:
+        trains = []
+        for connection in data["polaczenia"]:
+            if len(connection["pociagi"]) == 1:           # direct connections only (a single train)
+                t = connection["pociagi"][0]
+                trains.append({
+                    "category": t["kategoriaPociagu"],
+                    "number": str(t["nrPociagu"]),
+                    "name": t["nazwaPociagu"],
+                    "departure": t["dataWyjazdu"],
+                })
+        return trains
+    except (KeyError, TypeError, IndexError) as exc:
+        raise InterCityError("Unexpected connections response shape from InterCity.") from exc

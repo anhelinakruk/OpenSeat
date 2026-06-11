@@ -14,6 +14,10 @@ _TIMEOUT = 30
 _ATTEMPTS = 3
 _BACKOFF = 1.5  # seconds, increasing per attempt
 
+# Reused across calls so a single journey (dozens of seat-map fetches) shares TCP/TLS
+# connections instead of reconnecting each time; this also lightens the load on InterCity.
+_session = requests.Session()
+
 
 def _request(method: str, url: str, *, json_body: dict | None = None,
              extra_headers: dict | None = None) -> requests.Response:
@@ -22,7 +26,7 @@ def _request(method: str, url: str, *, json_body: dict | None = None,
     last_error: object = None
     for attempt in range(_ATTEMPTS):
         try:
-            response = requests.request(method, url, headers=headers, json=json_body, timeout=_TIMEOUT)
+            response = _session.request(method, url, headers=headers, json=json_body, timeout=_TIMEOUT)
         except requests.RequestException as exc:        # dropped connection / timeout (e.g. IP block)
             last_error = exc
             time.sleep(_BACKOFF * (attempt + 1))
@@ -35,7 +39,8 @@ def _request(method: str, url: str, *, json_body: dict | None = None,
             last_error = InterCityError(f"HTTP {response.status_code} from {url}")
             time.sleep(_BACKOFF * (attempt + 1))
             continue
-        response.raise_for_status()
+        if not response.ok:                             # other 4xx: a client/logic error, not transient
+            raise InterCityError(f"HTTP {response.status_code} from {url}")
         return response
     raise InterCityError(f"Could not reach InterCity ({url}): {last_error}")
 

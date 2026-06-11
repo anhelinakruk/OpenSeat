@@ -90,9 +90,12 @@ def plan_journey(category: str, number: str, departure: str,
     dep_e = _cached_h_to_e(stops[0]["nazwaStacji"], stops[0]["kodStacji"])
     arr_e = _cached_h_to_e(stops[-1]["nazwaStacji"], stops[-1]["kodStacji"])
     composition = _cached_composition(category, number, dep_e, arr_e, date)
+    try:
+        wagons, schemas = composition["wagony"], composition["wagonySchemat"]
+    except (KeyError, TypeError) as exc:
+        raise InterCityError("Unexpected composition response shape from InterCity.") from exc
 
-    legs = train_legs_free(category, number, stops, date,
-                           composition["wagony"], composition["wagonySchemat"])
+    legs = train_legs_free(category, number, stops, date, wagons, schemas)
     plans = hopping.find_plans(legs, limit)
 
     names = [s["nazwaStacji"] for s in stops]
