@@ -49,7 +49,8 @@ Then open <http://127.0.0.1:8000/>.
 ./venv/bin/python manage.py test trains
 ```
 
-The tests cover the hopping algorithm (`trains/tests.py`) and need no network or database.
+The tests cover the hopping algorithm, the SVG seat parser and the client's upstream-error
+mapping (`trains/tests.py`); they need no network or database.
 
 ## API
 
@@ -58,6 +59,24 @@ The tests cover the hopping algorithm (`trains/tests.py`) and need no network or
 | `GET /api/stations/?q=` | station autocomplete |
 | `GET /api/connections/?from=&to=&date=` | direct trains for a relation (`from`/`to` are `h` codes, `date` is `YYYY-MM-DD`) |
 | `GET /api/journey/?category=&number=&departure=&from=&to=&date=` | seat / seat-hopping plan for a chosen train |
+
+`/api/journey/` returns options ordered by fewest seat changes (`transfers`):
+
+```json
+{
+  "options": [
+    {
+      "transfers": 1,
+      "segments": [
+        {"wagon": "15", "seat": "61", "from": "Wrocław Główny", "to": "Katowice"},
+        {"wagon": "15", "seat": "16", "from": "Katowice", "to": "Kraków Główny"}
+      ]
+    }
+  ]
+}
+```
+
+An empty `options` list means no seat is available, even with changes.
 
 ## Notes
 
