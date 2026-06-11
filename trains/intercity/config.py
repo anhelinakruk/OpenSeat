@@ -9,7 +9,7 @@ WWW = "https://www.intercity.pl"
 # Value observed in ebilet network traffic (see docs/INTERCITY_API.md).
 DEVICE_NR = 956
 # Client version string sent in POST bodies.
-VERSION = "1.5.10_mobile"
+VERSION = "1.5.12_mobile"
 
 # The `Origin` header is CRITICAL: without it Akamai drops the connection.
 DEFAULT_HEADERS = {
