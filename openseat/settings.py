@@ -83,9 +83,11 @@ DATABASES = {
 
 
 # Cache
-# Used by the InterCity service layer (trains/intercity/finder.py) to avoid hammering the
-# upstream API. LocMemCache is per-process and fine for development; for multi-process
-# production (e.g. gunicorn) use a shared backend such as Redis.
+# Used by the InterCity service layer (trains/intercity/finder.py) for the slow-changing data
+# (station codes, routes, compositions). Volatile seat maps are cached in the database instead
+# (trains.models.SeatMapCache) so they survive restarts and are shared across processes.
+# LocMemCache is per-process and fine for development; in multi-process production (e.g. gunicorn)
+# use a shared backend such as Redis for these in-memory entries too.
 
 CACHES = {
     'default': {

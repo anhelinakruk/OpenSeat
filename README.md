@@ -16,8 +16,16 @@ Browser (HTML + JS)  →  Django REST API  →  InterCity client + hopping algor
 
 - `trains/intercity/` — framework-agnostic InterCity client (HTTP, station codes, SVG parser),
   the seat-hopping algorithm (`hopping.py`) and the service layer (`finder.py`).
+- `trains/models.py` — `SeatMapCache`, a database-backed cache of volatile seat maps.
 - `trains/api.py`, `trains/urls.py` — REST API endpoints.
 - `trains/templates/index.html` — single-page frontend.
+
+### Caching
+
+Data is cached by how fast it changes. Slow-changing data (station codes, routes, train
+compositions) lives in the in-memory cache framework. The volatile seat maps are cached in the
+database (`SeatMapCache`) with a short TTL, so the cache survives restarts and is shared across
+worker processes — which also keeps request volume to InterCity low.
 
 ## Requirements
 
@@ -49,8 +57,9 @@ Then open <http://127.0.0.1:8000/>.
 ./venv/bin/python manage.py test trains
 ```
 
-The tests cover the hopping algorithm, the SVG seat parser and the client's upstream-error
-mapping (`trains/tests.py`); they need no network or database.
+The tests cover the hopping algorithm, the SVG seat parser, the client's upstream-error
+mapping and the `SeatMapCache` model (`trains/tests.py`). They need no network; the model tests
+run against a throwaway test database that Django creates automatically.
 
 ## API
 

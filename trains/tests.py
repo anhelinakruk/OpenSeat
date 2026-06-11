@@ -1,11 +1,14 @@
-"""Tests for the seat-hopping algorithm and the InterCity parser/client (no network, no database)."""
+"""Tests for the seat-hopping algorithm, the InterCity parser/client and the seat-map cache."""
+from datetime import timedelta
 from unittest import mock
 
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, TestCase
+from django.utils import timezone
 
 from trains.intercity import client, parser
 from trains.intercity.errors import InterCityError
 from trains.intercity.hopping import find_plan, find_plans, fully_free_seats, seat_reach
+from trains.models import SeatMapCache
 
 
 class FullyFreeSeatsTests(SimpleTestCase):
@@ -121,3 +124,43 @@ class ClientErrorMappingTests(SimpleTestCase):
         with mock.patch.object(client, "_call_pociagi", return_value={"unexpected": True}):
             with self.assertRaises(InterCityError):
                 client.search_connections(5100069, 5100051, "2026-06-12")
+
+
+class SeatMapCacheTests(TestCase):
+    _ident = dict(category="IC", number="6304", wagon="15",
+                  dep_code="5100143", arr_code="5100051", journey_date="20260612")
+
+    def test_store_then_get_fresh_returns_svg(self):
+        SeatMapCache.store(**self._ident, svg="<svg>1</svg>")
+        self.assertEqual(SeatMapCache.get_fresh(**self._ident, ttl=120), "<svg>1</svg>")
+
+    def test_get_fresh_misses_when_absent(self):
+        self.assertIsNone(SeatMapCache.get_fresh(**self._ident, ttl=120))
+
+    def test_expired_entry_is_a_miss(self):
+        SeatMapCache.store(**self._ident, svg="<svg>old</svg>")
+        SeatMapCache.objects.update(fetched_at=timezone.now() - timedelta(seconds=200))
+        self.assertIsNone(SeatMapCache.get_fresh(**self._ident, ttl=120))
+
+    def test_store_refreshes_existing_row(self):
+        SeatMapCache.store(**self._ident, svg="<svg>old</svg>")
+        SeatMapCache.store(**self._ident, svg="<svg>new</svg>")
+        self.assertEqual(SeatMapCache.objects.count(), 1)        # update, not a duplicate
+        self.assertEqual(SeatMapCache.get_fresh(**self._ident, ttl=120), "<svg>new</svg>")
+
+
+class PruneSignalTests(TestCase):
+    def test_save_prunes_stale_rows(self):
+        # An old seat map from a different leg, aged past the staleness window.
+        old = dict(category="IC", number="6304", wagon="14",
+                   dep_code="5100143", arr_code="5100051", journey_date="20260612")
+        SeatMapCache.store(**old, svg="<svg>old</svg>")
+        SeatMapCache.objects.filter(wagon="14").update(
+            fetched_at=timezone.now() - timedelta(seconds=7200))
+
+        # Saving a fresh row fires post_save -> the stale row is pruned.
+        fresh = dict(old, wagon="15")
+        SeatMapCache.store(**fresh, svg="<svg>new</svg>")
+
+        remaining = list(SeatMapCache.objects.values_list("wagon", flat=True))
+        self.assertEqual(remaining, ["15"])                      # only the fresh row survives

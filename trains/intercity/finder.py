@@ -1,8 +1,9 @@
 """Service layer: combines the API client, parser and algorithm into a ready journey plan.
 
 Adds caching so repeated queries do not hammer InterCity. Data is cached by how fast it
-changes: station codes / routes / compositions for hours, seat availability for a short window.
-Uses Django's cache framework (LocMemCache by default; use Redis for multi-process production).
+changes: station codes / routes / compositions sit in the in-memory cache framework for hours,
+while volatile seat maps are cached in the database (SeatMapCache) for a short window so they
+survive restarts and are shared across worker processes.
 """
 from concurrent.futures import ThreadPoolExecutor
 
@@ -10,6 +11,7 @@ from django.core.cache import cache
 
 from . import client, parser, stations, hopping
 from .errors import InterCityError
+from ..models import SeatMapCache
 
 # A seat identifier across the whole train is a (wagon_number, seat_number) pair.
 Seat = tuple
@@ -39,10 +41,20 @@ def _cached_composition(category: str, number: str, dep_e: str, arr_e: str, date
 
 def _cached_seats(category: str, number: str, wagon: str, schema: str,
                   dep_e: str, arr_e: str, date: str) -> str:
+    """Return a wagon's seat-map SVG, served from the database cache when still fresh.
+
+    Seat availability is volatile, so it lives in the DB (SeatMapCache) instead of local memory:
+    the cache survives restarts and is shared across worker processes.
+    """
+    ident = dict(category=category, number=number, wagon=wagon,
+                 dep_code=dep_e, arr_code=arr_e, journey_date=date)
+    cached = SeatMapCache.get_fresh(**ident, ttl=_SEATS_TTL)
+    if cached is not None:
+        return cached
     ts = date + "0000"
-    key = f"seats:{category}:{number}:{wagon}:{dep_e}:{arr_e}:{date}"
-    return cache.get_or_set(
-        key, lambda: client.get_seats(category, number, wagon, schema, dep_e, arr_e, ts, ts), _SEATS_TTL)
+    svg = client.get_seats(category, number, wagon, schema, dep_e, arr_e, ts, ts)
+    SeatMapCache.store(**ident, svg=svg)
+    return svg
 
 
 def wagon_legs_free(category: str, number: str, wagon: str, schema: str,
